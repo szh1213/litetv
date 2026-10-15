@@ -13,11 +13,11 @@ import java.util.concurrent.TimeUnit
  * 注意：绝不能复用 Http.client —— 那会把 B 站 Cookie 发到 GitHub。
  */
 object Updater {
-    /** 依次尝试：jsDelivr CDN（国内可直连）→ GitHub raw（部分网络被 DNS 污染） */
+    /** 依次尝试：jsDelivr CDN（国内可直连；实测带 @branch 会 503，默认分支写法才 200）→ GitHub raw（部分网络被 DNS 污染） */
     const val JSDELIVR_URL =
-        "https://cdn.jsdelivr.net/gh/szh1213/litetv@master/version.json"
+        "https://cdn.jsdelivr.net/gh/szh1213/litetv/version.json"
     const val RAW_URL =
-        "https://raw.githubusercontent.com/szh1213/litetv/master/version.json"
+        "https://raw.githubusercontent.com/szh1213/litetv/main/version.json"
     val CHECK_URLS = listOf(JSDELIVR_URL, RAW_URL)
 
     @Serializable
