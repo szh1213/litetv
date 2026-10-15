@@ -3,5 +3,7 @@ build/
 local.properties
 app/build/
 *.apk
+!dist/
+!dist/*.apk
 *.png
 .idea/

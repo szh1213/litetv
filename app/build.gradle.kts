@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -9,17 +11,31 @@ android {
     namespace = "dev.litetv"
     compileSdk = 34
 
+    val keystoreProps = Properties()
+    val lpFile = rootProject.file("local.properties")
+    if (lpFile.exists()) lpFile.inputStream().use { keystoreProps.load(it) }
+
+    signingConfigs {
+        create("release") {
+            storeFile = file(keystoreProps.getProperty("KEYSTORE_FILE", "missing.keystore"))
+            storePassword = keystoreProps.getProperty("KEYSTORE_PASSWORD", "")
+            keyAlias = keystoreProps.getProperty("KEY_ALIAS", "")
+            keyPassword = keystoreProps.getProperty("KEY_PASSWORD", "")
+        }
+    }
+
     defaultConfig {
         applicationId = "dev.litetv"
         minSdk = 21
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
