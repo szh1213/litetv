@@ -1,6 +1,7 @@
 package dev.litetv
 
 import android.os.Bundle
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -27,6 +28,14 @@ import dev.litetv.ui.PlayerScreen
 import dev.litetv.ui.SettingsScreen
 
 class MainActivity : ComponentActivity() {
+    /** 播放器在 Activity 层拦截遥控器按键：盒子无焦点时 Compose 的 key 修饰符收不到事件 */
+    var playerKeyHandler: ((KeyEvent) -> Boolean)? = null
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (playerKeyHandler?.invoke(event) == true) return true
+        return super.dispatchKeyEvent(event)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Store.init(applicationContext)

@@ -17,9 +17,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -29,6 +26,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.ui.PlayerView
+import dev.litetv.MainActivity
 import dev.litetv.data.Store
 import dev.litetv.net.BiliApi
 import dev.litetv.net.BiliError
@@ -36,7 +34,8 @@ import dev.litetv.net.Episode
 import dev.litetv.net.Http
 
 /**
- * 遥控器：上=上一集，下=下一集，左右/确认交给 Media3 控制条，返回退出。
+ * 遥控器（Activity 层拦截）：上/下=上一集/下一集，左/右=快退/快进 15s，
+ * 确认/回车/空格=播放暂停，返回=退出。按键时点亮 Media3 控制条作为反馈。
  * 只喂 playurl 给的单文件 MP4（H.264），走硬解；不做 DASH、不做多播放器兜底。
  */
 @Composable
@@ -50,10 +49,63 @@ fun PlayerScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
     var quality by remember { mutableStateOf(0) }
+    var pv by remember { mutableStateOf<PlayerView?>(null) }
 
     val player = remember { ExoPlayer.Builder(context).build() }
 
     fun saveProgress() = Store.saveProgress(episodes[index], player.currentPosition)
+
+    val activity = context as? MainActivity
+    DisposableEffect(activity) {
+        activity?.playerKeyHandler = { ev ->
+            if (ev.action != KeyEvent.ACTION_DOWN) {
+                false
+            } else {
+                when (ev.keyCode) {
+                    KeyEvent.KEYCODE_DPAD_UP -> {
+                        if (index > 0) {
+                            saveProgress()
+                            index--
+                        }
+                        true
+                    }
+
+                    KeyEvent.KEYCODE_DPAD_DOWN -> {
+                        if (index < episodes.lastIndex) {
+                            saveProgress()
+                            index++
+                        }
+                        true
+                    }
+
+                    KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_MEDIA_REWIND -> {
+                        player.seekTo((player.currentPosition - 15_000).coerceAtLeast(0))
+                        pv?.showController()
+                        true
+                    }
+
+                    KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
+                        val d = player.duration
+                        val target = player.currentPosition + 15_000
+                        player.seekTo(if (d > 0) target.coerceAtMost(d) else target)
+                        pv?.showController()
+                        true
+                    }
+
+                    KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
+                    KeyEvent.KEYCODE_SPACE, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
+                    -> {
+                        player.playWhenReady = !player.playWhenReady
+                        pv?.showController()
+                        true
+                    }
+
+                    else -> false
+                }
+            }
+        }
+        onDispose { activity?.playerKeyHandler = null }
+    }
 
     LaunchedEffect(index) {
         val ep = episodes[index]
@@ -106,40 +158,14 @@ fun PlayerScreen(
         }
     }
 
-    Box(
-        Modifier
-            .fillMaxSize()
-            .onPreviewKeyEvent { ev ->
-                if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                when (ev.nativeKeyEvent.keyCode) {
-                    KeyEvent.KEYCODE_DPAD_UP -> {
-                        if (index > 0) {
-                            saveProgress()
-                            index--
-                        }
-                        true
-                    }
-
-                    KeyEvent.KEYCODE_DPAD_DOWN -> {
-                        if (index < episodes.lastIndex) {
-                            saveProgress()
-                            index++
-                        }
-                        true
-                    }
-
-                    else -> false
-                }
-            }
-    ) {
+    Box(Modifier.fillMaxSize()) {
         AndroidView(
             factory = { ctx ->
-                val exo = player
                 PlayerView(ctx).apply {
                     useController = true
                     setControllerShowTimeoutMs(4000)
-                    setPlayer(exo)
-                }
+                    setPlayer(player)
+                }.also { pv = it }
             },
             update = { it.player = player },
             modifier = Modifier.fillMaxSize(),
