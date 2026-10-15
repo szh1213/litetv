@@ -40,9 +40,11 @@ object Updater {
     suspend fun check(currentVersionCode: Int): Result<CheckResult> = withContext(Dispatchers.IO) {
         runCatching {
             var lastError: Exception? = null
+            // jsDelivr 会缓存默认分支引用数小时，加时间戳查询串强制回源
+            val cb = "?cb=" + System.currentTimeMillis()
             for (url in CHECK_URLS) {
                 try {
-                    val text = client.newCall(Request.Builder().url(url).build())
+                    val text = client.newCall(Request.Builder().url(url + cb).build())
                         .execute().use { it.body?.string().orEmpty() }
                     val info = Http.json.decodeFromString(serializer<VersionInfo>(), text)
                     return@runCatching if (info.versionCode > currentVersionCode) {
