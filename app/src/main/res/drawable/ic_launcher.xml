@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 按 bilibili 官方 favicon 32x32 像素图 1:1 描摹（描边 4/32、竖条双眼、短天线） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#0B0B0F"
+        android:pathData="M0,0h108v108h-108z" />
+    <path
+        android:pathData="M27.8,14.6 L43.5,27.8"
+        android:strokeColor="#23ADE5"
+        android:strokeWidth="10.5"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M80.2,14.6 L64.5,27.8"
+        android:strokeColor="#23ADE5"
+        android:strokeWidth="10.5"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M27,33h54a10,10 0 0 1 10,10v33a10,10 0 0 1 -10,10h-54a10,10 0 0 1 -10,-10v-33a10,10 0 0 1 10,-10z"
+        android:strokeColor="#23ADE5"
+        android:strokeWidth="10.5"
+        android:strokeLineJoin="round" />
+    <path
+        android:fillColor="#23ADE5"
+        android:pathData="M35.55,55.3a5.25,7.9 0 1 0 10.5,0a5.25,7.9 0 1 0 -10.5,0z" />
+    <path
+        android:fillColor="#23ADE5"
+        android:pathData="M61.95,55.3a5.25,7.9 0 1 0 10.5,0a5.25,7.9 0 1 0 -10.5,0z" />
+</vector>

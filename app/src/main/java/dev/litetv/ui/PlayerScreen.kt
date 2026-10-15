@@ -1,0 +1,172 @@
+package dev.litetv.ui
+
+import android.view.KeyEvent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.ui.PlayerView
+import dev.litetv.data.Store
+import dev.litetv.net.BiliApi
+import dev.litetv.net.BiliError
+import dev.litetv.net.Episode
+import dev.litetv.net.Http
+
+/**
+ * 遥控器：上=上一集，下=下一集，左右/确认交给 Media3 控制条，返回退出。
+ * 只喂 playurl 给的单文件 MP4（H.264），走硬解；不做 DASH、不做多播放器兜底。
+ */
+@Composable
+fun PlayerScreen(
+    episodes: List<Episode>,
+    startIndex: Int,
+    onBack: () -> Unit,
+) {
+    val context = LocalContext.current
+    var index by remember { mutableIntStateOf(startIndex.coerceIn(0, episodes.lastIndex)) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var quality by remember { mutableStateOf(0) }
+
+    val player = remember { ExoPlayer.Builder(context).build() }
+
+    fun saveProgress() = Store.saveProgress(episodes[index], player.currentPosition)
+
+    LaunchedEffect(index) {
+        val ep = episodes[index]
+        loading = true
+        error = null
+        runCatching { BiliApi.stream(ep.bvid, ep.cid) }
+            .onSuccess { s ->
+                quality = s.quality
+                // 流地址强校验 Referer/Cookie，必须回带给播放器，否则 403
+                val dsFactory = DefaultHttpDataSource.Factory()
+                    .setUserAgent(Http.UA)
+                    .setDefaultRequestProperties(
+                        mapOf(
+                            "Referer" to "https://www.bilibili.com/",
+                            "Cookie" to Http.cookie,
+                        )
+                    )
+                val source = ProgressiveMediaSource.Factory(dsFactory)
+                    .createMediaSource(MediaItem.fromUri(s.url))
+                player.setMediaSource(source)
+                val resume = Store.progressOf(ep.progressKey).positionMs
+                if (resume > 10_000 && resume < s.durationMs) player.seekTo(resume)
+                player.prepare()
+                player.playWhenReady = true
+                loading = false
+            }
+            .onFailure { t ->
+                loading = false
+                error = if (t is BiliError) {
+                    if (t.code == 87008) "该视频为充电专属内容，无法播放"
+                    else "取流失败 code=${t.code} ${t.message}"
+                } else "取流失败：${t.message}"
+            }
+    }
+
+    DisposableEffect(index) {
+        val listener = object : Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_ENDED && index < episodes.lastIndex) index++
+            }
+        }
+        player.addListener(listener)
+        onDispose { player.removeListener(listener) }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            saveProgress()
+            player.release()
+        }
+    }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .onPreviewKeyEvent { ev ->
+                if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (ev.nativeKeyEvent.keyCode) {
+                    KeyEvent.KEYCODE_DPAD_UP -> {
+                        if (index > 0) {
+                            saveProgress()
+                            index--
+                        }
+                        true
+                    }
+
+                    KeyEvent.KEYCODE_DPAD_DOWN -> {
+                        if (index < episodes.lastIndex) {
+                            saveProgress()
+                            index++
+                        }
+                        true
+                    }
+
+                    else -> false
+                }
+            }
+    ) {
+        AndroidView(
+            factory = { ctx ->
+                val exo = player
+                PlayerView(ctx).apply {
+                    useController = true
+                    setControllerShowTimeoutMs(4000)
+                    setPlayer(exo)
+                }
+            },
+            update = { it.player = player },
+            modifier = Modifier.fillMaxSize(),
+        )
+
+        if (loading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        }
+
+        error?.let {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(it, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(24.dp))
+            }
+        }
+
+        val ep = episodes[index]
+        Text(
+            text = buildString {
+                append("${index + 1}/${episodes.size}  ${ep.title}")
+                if (quality > 0) append("   [${quality}P]")
+                if (ep.paid) append("   付费内容")
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+            modifier = Modifier.align(Alignment.TopStart).padding(16.dp),
+        )
+    }
+}
