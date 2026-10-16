@@ -1,19 +1,14 @@
 package dev.litetv.ui
 
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
-import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -29,13 +24,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.content.FileProvider
 import dev.litetv.data.Store
 import dev.litetv.net.Updater
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.io.File
 
 @Composable
 fun SettingsScreen(versionName: String, versionCode: Int, onLoggedOut: () -> Unit) {
@@ -99,7 +91,7 @@ fun SettingsScreen(versionName: String, versionCode: Int, onLoggedOut: () -> Uni
                         downloading -> {
                             val (done, total) = dl
                             if (total > 0) "下载中 ${done * 100 / total}%"
-                            else "下载中 ${done / 1024 / 1024}MB…"
+                            else "下载中…"
                         }
                         else -> "下载 v${info.versionName}"
                     },
@@ -109,27 +101,30 @@ fun SettingsScreen(versionName: String, versionCode: Int, onLoggedOut: () -> Uni
                             status = "更新地址为空"
                             return@FocusChip
                         }
-                        if (!canInstallApk(context)) {
-                            status = "请先允许本应用安装未知应用，再点击下载"
-                            openUnknownSourcesSettings(context)
-                            return@FocusChip
-                        }
-                        status = "正在下载 v${info.versionName}…"
+                        status = "已交给系统下载 v${info.versionName}…"
                         downloading = true
                         dl = 0L to 0L
                         scope.launch {
-                            runCatching {
-                                Updater.download(context, info) { done, total ->
-                                    withContext(Dispatchers.Main) { dl = done to total }
+                            val id = runCatching { Updater.enqueueDownload(context, info) }
+                                .getOrElse {
+                                    downloading = false
+                                    status = "发起下载失败：${it.message}，可改用浏览器下载"
+                                    return@launch
                                 }
-                            }.onSuccess { file ->
-                                downloading = false
-                                status = "下载完成，请在系统弹窗中确认安装"
-                                runCatching { installApk(context, file) }
-                                    .onFailure { status = "打开安装器失败：${it.message}，可改用浏览器下载" }
-                            }.onFailure {
-                                downloading = false
-                                status = "下载失败：${it.message}，可改用浏览器下载"
+                            while (true) {
+                                val p = Updater.queryProgress(context, id)
+                                dl = p.done to p.total
+                                if (p.succeeded) {
+                                    downloading = false
+                                    status = "下载完成：请点击系统通知里的下载项完成安装"
+                                    break
+                                }
+                                if (p.failed) {
+                                    downloading = false
+                                    status = "下载失败，可改用浏览器下载"
+                                    break
+                                }
+                                delay(500)
                             }
                         }
                     },
@@ -190,31 +185,4 @@ private fun FocusChip(label: String, onClick: () -> Unit) {
     ) {
         Text(label, style = MaterialTheme.typography.bodyMedium)
     }
-}
-
-private fun canInstallApk(context: Context): Boolean =
-    Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
-        context.packageManager.canRequestPackageInstalls()
-
-private fun openUnknownSourcesSettings(context: Context) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        runCatching {
-            context.startActivity(
-                Intent(
-                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                    Uri.parse("package:${context.packageName}"),
-                )
-            )
-        }
-    }
-}
-
-private fun installApk(context: Context, file: File) {
-    val uri = FileProvider.getUriForFile(context, "${context.packageName}.updates", file)
-    val intent = Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(uri, "application/vnd.android.package-archive")
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
-    context.startActivity(intent)
 }
