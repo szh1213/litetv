@@ -2,6 +2,7 @@ package dev.litetv.ui
 
 import android.view.KeyEvent
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
@@ -49,6 +50,7 @@ fun PlayerScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
     var quality by remember { mutableStateOf(0) }
+    var notice by remember { mutableStateOf<String?>(null) }
     var pv by remember { mutableStateOf<PlayerView?>(null) }
 
     val player = remember { ExoPlayer.Builder(context).build() }
@@ -111,9 +113,17 @@ fun PlayerScreen(
         val ep = episodes[index]
         loading = true
         error = null
+        notice = null
         runCatching { BiliApi.stream(ep.bvid, ep.cid) }
             .onSuccess { s ->
                 quality = s.quality
+                // 服务器给的片段明显短于正片 = 试看：充电专属或未解锁付费内容
+                val full = if (s.fullDurationMs > 0) s.fullDurationMs else ep.durationMs
+                notice = if (s.isPreview) {
+                    val tail = "仅能试看 ${fmt(s.durationMs)}（完整 ${fmt(full)}）"
+                    if (ep.chargingOnly) "UP 主充电专属，$tail；给该 UP 主充电后可看完整版"
+                    else "该视频未解锁（充电专属或付费内容），$tail"
+                } else null
                 // 流地址强校验 Referer/Cookie，必须回带给播放器，否则 403
                 val dsFactory = DefaultHttpDataSource.Factory()
                     .setUserAgent(Http.UA)
@@ -184,15 +194,24 @@ fun PlayerScreen(
         }
 
         val ep = episodes[index]
-        Text(
-            text = buildString {
-                append("${index + 1}/${episodes.size}  ${ep.title}")
-                if (quality > 0) append("   [${quality}P]")
-                if (ep.paid) append("   付费内容")
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
-            modifier = Modifier.align(Alignment.TopStart).padding(16.dp),
-        )
+        Column(Modifier.align(Alignment.TopStart).padding(16.dp)) {
+            Text(
+                text = buildString {
+                    append("${index + 1}/${episodes.size}  ${ep.title}")
+                    if (quality > 0) append("   [${quality}P]")
+                    if (ep.paid) append("   付费内容")
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+            )
+            notice?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
     }
 }

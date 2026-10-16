@@ -72,11 +72,18 @@ object Http {
 /** 播放器需要的流地址 + 必须回带的请求头 */
 data class Stream(
     val url: String,
+    /** 实际能播到的长度。试看时会远小于 fullDurationMs */
     val durationMs: Long,
+    /** 正片总时长，来自 playurl 的 timelength */
+    val fullDurationMs: Long,
     val quality: Int,
     val codecId: Int,
     val headers: Map<String, String>,
-)
+) {
+    /** 服务器只给了试看片段（充电专属/付费内容未解锁时） */
+    val isPreview: Boolean
+        get() = durationMs > 0 && fullDurationMs > 0 && durationMs < fullDurationMs - 5_000
+}
 
 object BiliApi {
 
@@ -104,6 +111,7 @@ object BiliApi {
         val v = view(bvid, aid)
         val season = v.season
         val paid = v.rights?.pay == true
+        val charging = v.upowerExclusive || v.upowerPreview
         return when {
             season != null && season.sections.isNotEmpty() ->
                 season.sections.flatMap { it.episodes }.map {
@@ -113,6 +121,7 @@ object BiliApi {
                         title = it.title,
                         durationMs = (it.arc?.duration.takeIf { d -> d != 0 } ?: v.duration) * 1000L,
                         paid = paid || it.attribute != 0,
+                        chargingOnly = charging,
                     )
                 }
 
@@ -124,6 +133,7 @@ object BiliApi {
                         title = it.part,
                         durationMs = it.duration * 1000L,
                         paid = paid,
+                        chargingOnly = charging,
                     )
                 }
 
@@ -134,6 +144,7 @@ object BiliApi {
                     title = v.title,
                     durationMs = v.duration * 1000L,
                     paid = paid,
+                    chargingOnly = charging,
                 )
             )
         }
@@ -163,6 +174,7 @@ object BiliApi {
         return Stream(
             url = d.url,
             durationMs = d.length,
+            fullDurationMs = p.timelength,
             quality = p.quality,
             codecId = p.videoCodecId,
             headers = mediaHeaders(),

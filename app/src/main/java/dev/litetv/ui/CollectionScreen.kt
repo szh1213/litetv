@@ -269,6 +269,7 @@ private fun EpisodeRow(index: Int, ep: Episode, onClick: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f).padding(horizontal = 16.dp),
             )
+            if (ep.chargingOnly) Text("充电专属", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 12.dp))
             if (ep.paid) Text("付费", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 12.dp))
             Text(
                 text = if (saved > 0) "${fmt(saved)} / ${fmt(ep.durationMs)}" else fmt(ep.durationMs),

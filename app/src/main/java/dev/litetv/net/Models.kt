@@ -1,7 +1,36 @@
 package dev.litetv.net
 
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+
+/**
+ * B 站同一字段在不同接口/不同视频上会给布尔、数字或字符串三种形态
+ * （实测 rights.pay 是 0/1，但别处见过 false）。严格 Boolean 会直接抛 JSON 异常。
+ */
+object LenientBool : KSerializer<Boolean> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("LenientBool", PrimitiveKind.BOOLEAN)
+
+    override fun serialize(encoder: Encoder, value: Boolean) = encoder.encodeBoolean(value)
+
+    override fun deserialize(decoder: Decoder): Boolean {
+        val json = decoder as? JsonDecoder ?: return decoder.decodeBoolean()
+        val el = json.decodeJsonElement() as? JsonPrimitive ?: return false
+        return when {
+            el.isString -> el.content.trim().equals("true", true) || el.content.trim() == "1"
+            else -> el.booleanOrNull ?: (el.content.trim() != "0" && el.content.trim().isNotEmpty())
+        }
+    }
+}
 
 @Serializable
 data class ApiResp<T>(
@@ -27,6 +56,13 @@ data class ViewResult(
     val pages: List<PageItem> = emptyList(),
     @SerialName("ugc_season") val season: Season? = null,
     val rights: Rights? = null,
+    /** UP 主充电专属：未充电只能看试看片段（实测佩奇合集 durl 只给 3 分钟） */
+    @SerialName("is_upower_exclusive")
+    @Serializable(with = LenientBool::class)
+    val upowerExclusive: Boolean = false,
+    @SerialName("is_upower_preview")
+    @Serializable(with = LenientBool::class)
+    val upowerPreview: Boolean = false,
 )
 
 @Serializable
@@ -39,7 +75,7 @@ data class PageItem(
 
 @Serializable
 data class Rights(
-    val pay: Boolean = false,
+    @Serializable(with = LenientBool::class) val pay: Boolean = false,
 )
 
 @Serializable
@@ -75,6 +111,8 @@ data class ArcLite(
 data class PlayUrl(
     val quality: Int = 0,
     val format: String = "",
+    /** 正片总时长。试看时它仍是完整时长，而 durl[0].length 只到试看终点 */
+    val timelength: Long = 0,
     @SerialName("video_codecid") val videoCodecId: Int = 0,
     @SerialName("accept_quality") val acceptQuality: List<Int> = emptyList(),
     val durl: List<Durl> = emptyList(),
@@ -139,6 +177,8 @@ data class Episode(
     val title: String,
     val durationMs: Long = 0,
     val paid: Boolean = false,
+    /** UP 主充电专属，未充电播放时只会拿到试看片段 */
+    val chargingOnly: Boolean = false,
 ) {
     /** 同一 bvid 的多个分P 各自存进度，必须用 cid 区分 */
     val progressKey: String get() = if (cid > 0) cid.toString() else bvid

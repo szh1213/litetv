@@ -75,7 +75,7 @@ private fun App(versionName: String, versionCode: Int) {
 
         Screen.Settings -> {
             BackHandler { screen = Screen.Home }
-            SettingsScreen(versionName, versionCode)
+            SettingsScreen(versionName, versionCode, onLoggedOut = { screen = Screen.Home })
         }
 
         Screen.Login -> {

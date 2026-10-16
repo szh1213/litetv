@@ -26,16 +26,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import dev.litetv.data.Store
 import dev.litetv.net.Updater
 import kotlinx.coroutines.launch
 
 @Composable
-fun SettingsScreen(versionName: String, versionCode: Int) {
+fun SettingsScreen(versionName: String, versionCode: Int, onLoggedOut: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var status by remember { mutableStateOf<String?>(null) }
     var newVer by remember { mutableStateOf<Updater.VersionInfo?>(null) }
     var checking by remember { mutableStateOf(false) }
+    var loggedIn by remember { mutableStateOf(Store.loggedIn) }
+    var confirmingLogout by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 24.dp)) {
         Text("设置", style = MaterialTheme.typography.headlineMedium)
@@ -89,6 +92,34 @@ fun SettingsScreen(versionName: String, versionCode: Int) {
                     }
                 },
             )
+        }
+
+        Row(
+            Modifier.fillMaxWidth().padding(top = 28.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                if (loggedIn) "账号：已登录" else "账号：未登录",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            if (loggedIn) {
+                FocusChip(
+                    label = if (confirmingLogout) "再点一次确认退出" else "退出登录",
+                    onClick = {
+                        if (!confirmingLogout) {
+                            confirmingLogout = true
+                        } else {
+                            Store.logout()
+                            loggedIn = false
+                            confirmingLogout = false
+                            status = "已退出登录"
+                            newVer = null
+                            onLoggedOut()
+                        }
+                    },
+                )
+            }
         }
     }
 }
