@@ -1,11 +1,13 @@
 package dev.litetv.net
 
+import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.serializer
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 /**
@@ -60,5 +62,49 @@ object Updater {
             }
             throw lastError ?: IllegalStateException("所有更新源均不可用")
         }
+    }
+
+    /**
+     * 下载更新包到应用私有缓存目录（无需存储权限），边下边回调进度。
+     * 完成后校验字节数与 ZIP 魔数，防止把错误页/半包拉给安装器。
+     */
+    suspend fun download(
+        context: Context,
+        info: VersionInfo,
+        onProgress: suspend (downloaded: Long, total: Long) -> Unit,
+    ): File = withContext(Dispatchers.IO) {
+        if (info.apkUrl.isBlank()) throw IllegalStateException("更新地址为空")
+        val dir = File(context.cacheDir, "updates")
+        dir.mkdirs()
+        dir.listFiles()?.forEach { it.delete() }
+        val file = File(dir, "litetv-${info.versionName.ifBlank { "update" }}.apk")
+        client.newCall(Request.Builder().url(info.apkUrl).build()).execute().use { resp ->
+            if (!resp.isSuccessful) throw IllegalStateException("HTTP ${resp.code}")
+            val body = resp.body ?: throw IllegalStateException("响应为空")
+            val total = body.contentLength()
+            var done = 0L
+            var lastTick = 0L
+            body.byteStream().use { input ->
+                file.outputStream().use { out ->
+                    val buf = ByteArray(64 * 1024)
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        out.write(buf, 0, n)
+                        done += n
+                        val now = System.currentTimeMillis()
+                        if (now - lastTick > 120) {
+                            lastTick = now
+                            onProgress(done, total)
+                        }
+                    }
+                }
+            }
+            if (total > 0 && done < total) throw IllegalStateException("下载不完整：$done/$total")
+            val isZip = file.inputStream().use { it.read() == 0x50 && it.read() == 0x4B }
+            if (!isZip) throw IllegalStateException("下载内容不是 APK")
+            onProgress(done, total)
+        }
+        file
     }
 }
