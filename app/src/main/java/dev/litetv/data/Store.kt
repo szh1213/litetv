@@ -70,6 +70,11 @@ object Store {
         get() = sp.getLong("mid", 0)
         set(value) = sp.edit().putLong("mid", value).apply()
 
+    /** 昵称，来自 nav 接口，仅用于展示；拿不到时界面回退显示"已登录" */
+    var uname: String
+        get() = sp.getString("uname", "").orEmpty()
+        set(value) = sp.edit().putString("uname", value).apply()
+
     val loggedIn: Boolean get() = cookie.contains("SESSDATA")
 
     fun saveLogin(cookiePairs: List<String>, refreshToken: String) {
@@ -90,6 +95,7 @@ object Store {
     fun logout() {
         cookie = ""
         mid = 0
+        uname = ""
         sp.edit().remove("refresh_token").apply()
     }
 

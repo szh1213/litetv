@@ -51,14 +51,29 @@ fun HomeScreen(
     var showAddLink by remember { mutableStateOf(false) }
     var showFav by remember { mutableStateOf(false) }
     var tip by remember { mutableStateOf<String?>(null) }
+    var uname by remember { mutableStateOf(Store.uname) }
     val scope = rememberCoroutineScope()
+
+    // 老版本装的已登录会话没存昵称，补拉一次
+    LaunchedEffect(Unit) {
+        if (Store.loggedIn && Store.uname.isBlank()) {
+            runCatching { BiliApi.nav() }.onSuccess {
+                Store.uname = it.uname
+                uname = it.uname
+            }
+        }
+    }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 20.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("LiteTV", style = MaterialTheme.typography.headlineMedium)
             Spacer(Modifier.width(24.dp))
             ActionChip(
-                label = if (Store.loggedIn) "已登录" else "未登录 · 扫码登录",
+                label = when {
+                    !Store.loggedIn -> "未登录 · 扫码登录"
+                    uname.isNotBlank() -> "已登录 · $uname"
+                    else -> "已登录"
+                },
                 onClick = { if (!Store.loggedIn) onLogin() },
             )
             ActionChip("从收藏夹导入") { showFav = !showFav }

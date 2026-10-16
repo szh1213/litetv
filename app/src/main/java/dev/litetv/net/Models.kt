@@ -43,6 +43,7 @@ data class ApiResp<T>(
 data class NavData(
     @SerialName("isLogin") val isLogin: Boolean = false,
     val mid: Long = 0,
+    val uname: String = "",
     val vipStatus: Int = 0,
 )
 

@@ -55,7 +55,9 @@ fun LoginScreen(onDone: () -> Unit) {
                     when (poll.code) {
                         0 -> {
                             Store.saveLogin(setCookies, poll.refreshToken)
-                            Store.mid = runCatching { BiliApi.nav().mid }.getOrDefault(0)
+                            val nav = runCatching { BiliApi.nav() }.getOrNull()
+                            Store.mid = nav?.mid ?: 0
+                            Store.uname = nav?.uname.orEmpty()
                             status = "登录成功"
                             onDone()
                             return@LaunchedEffect

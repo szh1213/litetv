@@ -99,7 +99,8 @@ fun SettingsScreen(versionName: String, versionCode: Int, onLoggedOut: () -> Uni
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                if (loggedIn) "账号：已登录" else "账号：未登录",
+                if (!loggedIn) "账号：未登录"
+                else "账号：" + Store.uname.ifBlank { "已登录" },
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.bodyLarge,
             )
